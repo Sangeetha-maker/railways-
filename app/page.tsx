@@ -1,6 +1,32 @@
 import { Train, MapPin, AlertTriangle, Cloud, Activity, Users } from 'lucide-react';
+import { useMetrics, useWeather, useSafety } from '@/lib/hooks/useRailwayData';
+import { useEffect, useState } from 'react';
+
+function DashboardContent() {
+  const { metrics, loading: metricsLoading } = useMetrics();
+  const { weather, loading: weatherLoading } = useWeather();
+  const { alerts, loading: alertsLoading } = useSafety();
+
+  if (metricsLoading || weatherLoading || alertsLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading Railway System...</p>
+        </div>
+      </div>
+    );
+  }
 
 export default function Home() {
+  return <DashboardContent />;
+}
+
+function DashboardContent() {
+  const { metrics } = useMetrics();
+  const { weather } = useWeather();
+  const { alerts } = useSafety();
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       {/* Header */}
@@ -43,44 +69,44 @@ export default function Home() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Active Trains</p>
-                <p className="text-3xl font-bold text-gray-900">24</p>
+                <p className="text-3xl font-bold text-gray-900">{metrics?.activeTrains || 0}</p>
               </div>
               <Train className="h-12 w-12 text-green-500" />
             </div>
-            <p className="text-sm text-green-600 mt-2">↑ 12% from yesterday</p>
+            <p className="text-sm text-green-600 mt-2">Real-time tracking</p>
           </div>
 
           <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-500">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">On-Time Performance</p>
-                <p className="text-3xl font-bold text-gray-900">94%</p>
+                <p className="text-3xl font-bold text-gray-900">{metrics?.onTimePerformance || 0}%</p>
               </div>
               <Activity className="h-12 w-12 text-blue-500" />
             </div>
-            <p className="text-sm text-blue-600 mt-2">↑ 2% improvement</p>
+            <p className="text-sm text-blue-600 mt-2">Avg delay: {metrics?.averageDelay || 0} min</p>
           </div>
 
           <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-yellow-500">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Active Alerts</p>
-                <p className="text-3xl font-bold text-gray-900">3</p>
+                <p className="text-3xl font-bold text-gray-900">{alerts?.length || 0}</p>
               </div>
               <AlertTriangle className="h-12 w-12 text-yellow-500" />
             </div>
-            <p className="text-sm text-yellow-600 mt-2">2 weather, 1 maintenance</p>
+            <p className="text-sm text-yellow-600 mt-2">Safety monitoring active</p>
           </div>
 
           <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-purple-500">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Passengers Today</p>
-                <p className="text-3xl font-bold text-gray-900">15.2K</p>
+                <p className="text-3xl font-bold text-gray-900">{((metrics?.passengersToday || 0) / 1000).toFixed(1)}K</p>
               </div>
               <Users className="h-12 w-12 text-purple-500" />
             </div>
-            <p className="text-sm text-purple-600 mt-2">Peak hours: 8-10 AM</p>
+            <p className="text-sm text-purple-600 mt-2">Platform util: {metrics?.platformUtilization || 0}%</p>
           </div>
         </div>
 
@@ -192,14 +218,19 @@ export default function Home() {
             </h3>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-3xl font-bold text-gray-900">28°C</p>
-                <p className="text-gray-600">Partly Cloudy</p>
-                <p className="text-sm text-gray-500">Visibility: 8 km</p>
+                <p className="text-3xl font-bold text-gray-900">{weather?.temperature || 0}°C</p>
+                <p className="text-gray-600">{weather?.condition || 'Loading...'}</p>
+                <p className="text-sm text-gray-500">Visibility: {weather?.visibility || 0} km</p>
               </div>
               <div className="text-right">
-                <p className="text-sm text-gray-600">Wind: 12 km/h</p>
-                <p className="text-sm text-gray-600">Humidity: 65%</p>
-                <p className="text-sm text-green-600 font-medium">Normal Operations</p>
+                <p className="text-sm text-gray-600">Wind: {weather?.windSpeed || 0} km/h</p>
+                <p className="text-sm text-gray-600">Humidity: {weather?.humidity || 0}%</p>
+                <p className={`text-sm font-medium ${
+                  weather?.impact === 'Normal' ? 'text-green-600' : 
+                  weather?.impact === 'Caution' ? 'text-yellow-600' : 'text-red-600'
+                }`}>
+                  {weather?.impact || 'Normal'} Operations
+                </p>
               </div>
             </div>
           </div>
@@ -210,20 +241,33 @@ export default function Home() {
               Active Alerts
             </h3>
             <div className="space-y-3">
-              <div className="flex items-center space-x-3 p-3 bg-yellow-50 rounded-lg">
-                <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
-                <div>
-                  <p className="font-medium text-gray-900">Track Maintenance</p>
-                  <p className="text-sm text-gray-600">Platform 3 - Scheduled 2:00-4:00 PM</p>
+              {alerts && alerts.length > 0 ? (
+                alerts.slice(0, 3).map((alert) => (
+                  <div key={alert.id} className={`flex items-center space-x-3 p-3 rounded-lg ${
+                    alert.severity === 'Critical' ? 'bg-red-50' :
+                    alert.severity === 'High' ? 'bg-orange-50' :
+                    alert.severity === 'Medium' ? 'bg-yellow-50' : 'bg-blue-50'
+                  }`}>
+                    <div className={`w-2 h-2 rounded-full ${
+                      alert.severity === 'Critical' ? 'bg-red-500' :
+                      alert.severity === 'High' ? 'bg-orange-500' :
+                      alert.severity === 'Medium' ? 'bg-yellow-500' : 'bg-blue-500'
+                    }`}></div>
+                    <div>
+                      <p className="font-medium text-gray-900">{alert.title}</p>
+                      <p className="text-sm text-gray-600">{alert.description}</p>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="flex items-center space-x-3 p-3 bg-green-50 rounded-lg">
+                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  <div>
+                    <p className="font-medium text-gray-900">All Clear</p>
+                    <p className="text-sm text-gray-600">No active safety alerts</p>
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-center space-x-3 p-3 bg-blue-50 rounded-lg">
-                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                <div>
-                  <p className="font-medium text-gray-900">Weather Advisory</p>
-                  <p className="text-sm text-gray-600">Light rain expected 6:00-8:00 PM</p>
-                </div>
-              </div>
+              )}
             </div>
           </div>
         </div>
