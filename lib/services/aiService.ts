@@ -9,32 +9,87 @@ export class AIService {
 
   constructor() {
     this.generateInitialRecommendations();
+    
+    // Update AI analysis every 2 minutes
+    setInterval(() => {
+      this.updateAnalysis();
+    }, 120000);
+  }
+
+  private updateAnalysis(): void {
+    this.generateRecommendations();
     this.detectConflicts();
   }
 
   private generateInitialRecommendations(): void {
-    this.recommendations = [
-      {
-        id: 'REC-001',
+    this.generateRecommendations();
+    this.detectConflicts();
+  }
+
+  private generateRecommendations(): void {
+    this.recommendations = [];
+    
+    const currentHour = new Date().getHours();
+    const weather = weatherService.getCurrentWeather();
+    const trains = trainService.getAllTrains();
+
+    // Peak hour recommendations
+    if ((currentHour >= 8 && currentHour <= 10) || (currentHour >= 18 && currentHour <= 20)) {
+      this.recommendations.push({
+        id: `REC-PEAK-${Date.now()}`,
         type: 'Priority',
-        title: 'Increase EMU Priority During Peak Hours',
-        description: 'Boost EMU train priority from 8 AM to 10 AM to improve passenger flow',
-        impact: 'Reduce average delay by 3-5 minutes for local services',
-        confidence: 87,
+        title: 'Peak Hour Priority Adjustment',
+        description: 'Increase EMU train priority during peak hours for better passenger service',
+        impact: 'Reduce passenger waiting time by 20%',
+        confidence: 88,
         affectedTrains: trainService.getTrainsByType('EMU').map(t => t.id),
         timestamp: new Date().toISOString()
-      },
-      {
-        id: 'REC-002',
-        type: 'Platform',
-        title: 'Optimize Platform 1 Usage',
-        description: 'Reassign Express trains to Platform 1 for better passenger access',
-        impact: 'Improve boarding efficiency by 15%',
-        confidence: 92,
-        affectedTrains: trainService.getTrainsByType('Express').slice(0, 2).map(t => t.id),
+      });
+    }
+
+    // Weather-based recommendations
+    if (weather.impact !== 'Normal') {
+      this.recommendations.push({
+        id: `REC-WEATHER-${Date.now()}`,
+        type: 'Route',
+        title: 'Weather-Based Speed Restrictions',
+        description: `Implement ${weatherService.getSpeedRestriction()} km/h speed limit due to ${weather.condition.toLowerCase()}`,
+        impact: weather.impact === 'Restricted' ? 'Ensure safety compliance, expect 10-15 minute delays' : 'Monitor conditions closely',
+        confidence: 95,
+        affectedTrains: trains.map(t => t.id),
         timestamp: new Date().toISOString()
-      }
-    ];
+      });
+    }
+
+    // Platform optimization
+    const delayedTrains = trains.filter(t => t.delay > 10);
+    if (delayedTrains.length > 3) {
+      this.recommendations.push({
+        id: `REC-PLATFORM-${Date.now()}`,
+        type: 'Platform',
+        title: 'Platform Reallocation',
+        description: 'Optimize platform assignments to reduce delays',
+        impact: 'Reduce average delay by 5-8 minutes',
+        confidence: 82,
+        affectedTrains: delayedTrains.slice(0, 5).map(t => t.id),
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Priority optimization
+    const lowPriorityDelayed = trains.filter(t => t.delay > 15 && t.priority < 5);
+    if (lowPriorityDelayed.length > 0) {
+      this.recommendations.push({
+        id: `REC-PRIORITY-${Date.now()}`,
+        type: 'Priority',
+        title: 'Priority Adjustment for Delayed Trains',
+        description: 'Increase priority for significantly delayed trains',
+        impact: 'Improve recovery time for delayed services',
+        confidence: 75,
+        affectedTrains: lowPriorityDelayed.map(t => t.id),
+        timestamp: new Date().toISOString()
+      });
+    }
   }
 
   private detectConflicts(): void {
@@ -57,7 +112,7 @@ export class AIService {
     Object.entries(platformOccupancy).forEach(([key, conflictingTrains]) => {
       if (conflictingTrains.length > 1) {
         this.conflicts.push({
-          id: `CONF-${Date.now()}-${key}`,
+          id: `CONF-PLATFORM-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           type: 'Platform',
           trains: conflictingTrains.map(t => t.id),
           station: conflictingTrains[0].currentStation,
@@ -73,17 +128,19 @@ export class AIService {
     const stationArrivals: { [key: string]: Train[] } = {};
     
     trains.forEach(train => {
-      const key = `${train.currentStation}-${train.estimatedArrival}`;
-      if (!stationArrivals[key]) {
-        stationArrivals[key] = [];
+      if (train.estimatedArrival) {
+        const key = `${train.currentStation}-${train.estimatedArrival}`;
+        if (!stationArrivals[key]) {
+          stationArrivals[key] = [];
+        }
+        stationArrivals[key].push(train);
       }
-      stationArrivals[key].push(train);
     });
 
     Object.entries(stationArrivals).forEach(([key, conflictingTrains]) => {
       if (conflictingTrains.length > 1) {
         this.conflicts.push({
-          id: `CONF-${Date.now()}-${key}`,
+          id: `CONF-TIMING-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           type: 'Timing',
           trains: conflictingTrains.map(t => t.id),
           station: conflictingTrains[0].currentStation,
@@ -92,6 +149,40 @@ export class AIService {
           priority: this.calculateConflictPriority(conflictingTrains),
           timestamp: new Date().toISOString()
         });
+      }
+    });
+
+    // Track conflicts (same route segment)
+    const routeSegments: { [key: string]: Train[] } = {};
+    
+    trains.forEach(train => {
+      const segment = `${train.currentStation}-${train.nextStation}`;
+      if (!routeSegments[segment]) {
+        routeSegments[segment] = [];
+      }
+      routeSegments[segment].push(train);
+    });
+
+    Object.entries(routeSegments).forEach(([segment, conflictingTrains]) => {
+      if (conflictingTrains.length > 1) {
+        // Check if trains are close in time
+        const timeDiff = Math.abs(
+          new Date(`1970-01-01T${conflictingTrains[0].estimatedArrival}:00`).getTime() -
+          new Date(`1970-01-01T${conflictingTrains[1].estimatedArrival}:00`).getTime()
+        );
+        
+        if (timeDiff < 300000) { // Less than 5 minutes apart
+          this.conflicts.push({
+            id: `CONF-TRACK-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            type: 'Track',
+            trains: conflictingTrains.map(t => t.id),
+            station: conflictingTrains[0].currentStation,
+            description: `Multiple trains on same track segment: ${segment}`,
+            suggestedResolution: this.generateTrackResolution(conflictingTrains),
+            priority: this.calculateConflictPriority(conflictingTrains),
+            timestamp: new Date().toISOString()
+          });
+        }
       }
     });
   }
@@ -110,6 +201,12 @@ export class AIService {
     return `Maintain schedule for ${sortedByPriority[0].number} (highest priority). Delay others by 2-3 minutes.`;
   }
 
+  private generateTrackResolution(trains: Train[]): string {
+    const sortedByPriority = trains.sort((a, b) => b.priority - a.priority);
+    
+    return `Give track priority to ${sortedByPriority[0].number}. Hold ${sortedByPriority[1].number} at current station for 5 minutes.`;
+  }
+
   private calculateConflictPriority(trains: Train[]): number {
     const maxTrainPriority = Math.max(...trains.map(t => t.priority));
     const passengerImpact = trains.reduce((sum, t) => sum + t.passengerLoad, 0);
@@ -118,7 +215,7 @@ export class AIService {
   }
 
   getAllRecommendations(): AIRecommendation[] {
-    return this.recommendations;
+    return [...this.recommendations];
   }
 
   getRecommendationsByType(type: AIRecommendation['type']): AIRecommendation[] {
@@ -126,8 +223,7 @@ export class AIService {
   }
 
   getAllConflicts(): Conflict[] {
-    this.detectConflicts(); // Refresh conflicts
-    return this.conflicts;
+    return [...this.conflicts];
   }
 
   getConflictsByType(type: Conflict['type']): Conflict[] {
@@ -196,16 +292,25 @@ export class AIService {
       };
     }
 
-    // Simulate changes
+    // Store original values
     const originalPriority = train.priority;
     const originalDelay = train.delay;
+    const originalRoute = [...train.route];
 
-    if (scenario.newPriority) train.priority = scenario.newPriority;
-    if (scenario.delayMinutes) train.delay += scenario.delayMinutes;
+    // Apply scenario changes temporarily
+    if (scenario.newPriority !== undefined) train.priority = scenario.newPriority;
+    if (scenario.delayMinutes !== undefined) train.delay += scenario.delayMinutes;
+    if (scenario.newRoute) train.route = scenario.newRoute;
 
     // Analyze impact
-    const newConflicts = this.getAllConflicts();
     const affectedTrains = this.findAffectedTrains(train);
+    
+    // Detect new conflicts with changes
+    const originalConflicts = [...this.conflicts];
+    this.detectConflicts();
+    const newConflicts = this.conflicts.filter(conflict => 
+      !originalConflicts.some(orig => orig.id === conflict.id)
+    );
 
     // Generate recommendations based on analysis
     const recommendations: AIRecommendation[] = [];
@@ -223,9 +328,24 @@ export class AIService {
       });
     }
 
+    if (scenario.delayMinutes && scenario.delayMinutes > 0) {
+      recommendations.push({
+        id: `WHATIF-DELAY-${Date.now()}`,
+        type: 'Delay',
+        title: 'Delay Impact Analysis',
+        description: `Adding ${scenario.delayMinutes} minutes delay will affect downstream services`,
+        impact: `${affectedTrains.length} trains may experience cascading delays`,
+        confidence: 75,
+        affectedTrains: affectedTrains.map(t => t.id),
+        timestamp: new Date().toISOString()
+      });
+    }
+
     // Restore original values
     train.priority = originalPriority;
     train.delay = originalDelay;
+    train.route = originalRoute;
+    this.conflicts = originalConflicts;
 
     return {
       impact: this.calculateScenarioImpact(scenario, train),
@@ -253,6 +373,10 @@ export class AIService {
     
     if (scenario.delayMinutes) {
       impact += `- Additional delay: +${scenario.delayMinutes} minutes\n`;
+    }
+    
+    if (scenario.newRoute) {
+      impact += `- Route change: ${scenario.newRoute.length} stations\n`;
     }
     
     impact += `- Estimated passenger impact: ${train.passengerLoad}% capacity affected`;

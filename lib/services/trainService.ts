@@ -7,10 +7,13 @@ export class TrainService {
 
   constructor() {
     this.generateMockTrains();
+    // Update train positions every 30 seconds
+    setInterval(() => {
+      this.updateTrainPositions();
+    }, 30000);
   }
 
   private generateMockTrains(): void {
-    const trainTypes: Train['type'][] = ['EMU', 'Express', 'Superfast', 'Freight'];
     const statuses: Train['status'][] = ['On Time', 'Delayed', 'Departed'];
     
     // Generate EMU trains (local service)
@@ -33,7 +36,7 @@ export class TrainService {
         estimatedArrival: this.generateTime(0, 30),
         estimatedDeparture: this.generateTime(2, 35),
         route: stations.slice(0, Math.floor(Math.random() * 5) + 8).map(s => s.code),
-        priority: Math.floor(Math.random() * 3) + 3,
+        priority: Math.floor(Math.random() * 3) + 6,
         coordinates: {
           lat: stations[currentStationIndex].coordinates.lat + (Math.random() - 0.5) * 0.01,
           lng: stations[currentStationIndex].coordinates.lng + (Math.random() - 0.5) * 0.01
@@ -61,7 +64,7 @@ export class TrainService {
         estimatedArrival: this.generateTime(0, 60),
         estimatedDeparture: this.generateTime(5, 65),
         route: stations.map(s => s.code),
-        priority: Math.floor(Math.random() * 3) + 6,
+        priority: Math.floor(Math.random() * 2) + 8,
         coordinates: {
           lat: stations[currentStationIndex].coordinates.lat + (Math.random() - 0.5) * 0.01,
           lng: stations[currentStationIndex].coordinates.lng + (Math.random() - 0.5) * 0.01
@@ -88,7 +91,7 @@ export class TrainService {
         estimatedArrival: this.generateTime(0, 120),
         estimatedDeparture: this.generateTime(10, 130),
         route: stations.slice(0, Math.floor(Math.random() * 8) + 6).map(s => s.code),
-        priority: Math.floor(Math.random() * 2) + 1,
+        priority: Math.floor(Math.random() * 2) + 2,
         coordinates: {
           lat: stations[currentStationIndex].coordinates.lat + (Math.random() - 0.5) * 0.01,
           lng: stations[currentStationIndex].coordinates.lng + (Math.random() - 0.5) * 0.01
@@ -108,8 +111,35 @@ export class TrainService {
     });
   }
 
+  private updateTrainPositions(): void {
+    this.trains.forEach(train => {
+      // Simulate train movement
+      if (Math.random() < 0.3) { // 30% chance to move
+        const currentIndex = train.route.indexOf(train.currentStation);
+        if (currentIndex !== -1 && currentIndex < train.route.length - 1) {
+          train.currentStation = train.route[currentIndex + 1];
+          train.nextStation = train.route[currentIndex + 2] || train.route[train.route.length - 1];
+          
+          // Update coordinates
+          const station = stations.find(s => s.code === train.currentStation);
+          if (station) {
+            train.coordinates = {
+              lat: station.coordinates.lat + (Math.random() - 0.5) * 0.01,
+              lng: station.coordinates.lng + (Math.random() - 0.5) * 0.01
+            };
+          }
+        }
+      }
+      
+      // Update delay randomly
+      if (Math.random() < 0.2) { // 20% chance to change delay
+        train.delay = Math.max(0, train.delay + Math.floor(Math.random() * 6) - 3);
+      }
+    });
+  }
+
   getAllTrains(): Train[] {
-    return this.trains;
+    return [...this.trains];
   }
 
   getTrainById(id: string): Train | undefined {
@@ -135,6 +165,15 @@ export class TrainService {
       if (stationIndex !== -1) {
         train.currentStation = stationCode;
         train.nextStation = train.route[stationIndex + 1] || train.route[train.route.length - 1];
+        
+        // Update coordinates
+        const station = stations.find(s => s.code === stationCode);
+        if (station) {
+          train.coordinates = {
+            lat: station.coordinates.lat + (Math.random() - 0.5) * 0.01,
+            lng: station.coordinates.lng + (Math.random() - 0.5) * 0.01
+          };
+        }
         return true;
       }
     }

@@ -2,9 +2,16 @@ import { WeatherData } from '../types';
 
 export class WeatherService {
   private currentWeather: WeatherData;
+  private lastUpdate: Date;
 
   constructor() {
     this.currentWeather = this.generateMockWeather();
+    this.lastUpdate = new Date();
+    
+    // Update weather every 5 minutes
+    setInterval(() => {
+      this.updateWeather();
+    }, 300000);
   }
 
   private generateMockWeather(): WeatherData {
@@ -44,12 +51,16 @@ export class WeatherService {
     };
   }
 
-  getCurrentWeather(): WeatherData {
-    // Simulate weather changes
-    if (Math.random() < 0.1) { // 10% chance to update weather
+  private updateWeather(): void {
+    // 20% chance to change weather
+    if (Math.random() < 0.2) {
       this.currentWeather = this.generateMockWeather();
+      this.lastUpdate = new Date();
     }
-    return this.currentWeather;
+  }
+
+  getCurrentWeather(): WeatherData {
+    return { ...this.currentWeather };
   }
 
   getWeatherImpact(): string {
@@ -76,6 +87,10 @@ export class WeatherService {
       default:
         return 120; // Normal max speed
     }
+  }
+
+  getLastUpdate(): Date {
+    return new Date(this.lastUpdate);
   }
 }
 

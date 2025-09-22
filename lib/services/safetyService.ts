@@ -7,6 +7,11 @@ export class SafetyService {
 
   constructor() {
     this.generateInitialAlerts();
+    
+    // Run safety checks every minute
+    setInterval(() => {
+      this.runAutomaticSafetyCheck();
+    }, 60000);
   }
 
   private generateInitialAlerts(): void {
@@ -36,6 +41,34 @@ export class SafetyService {
     ];
   }
 
+  private runAutomaticSafetyCheck(): void {
+    // Clear old resolved alerts
+    this.alerts = this.alerts.filter(alert => !alert.resolved || 
+      (new Date().getTime() - new Date(alert.timestamp).getTime()) < 3600000); // Keep for 1 hour
+
+    // Run all safety checks
+    const newAlerts = [
+      ...this.checkWeatherCompliance(),
+      ...this.checkGSRCompliance(),
+      ...this.checkPlatformOccupancy(),
+      ...this.checkSignalCompliance()
+    ];
+
+    // Add new alerts
+    newAlerts.forEach(alert => {
+      // Check if similar alert already exists
+      const existingAlert = this.alerts.find(a => 
+        a.type === alert.type && 
+        a.title === alert.title && 
+        !a.resolved
+      );
+      
+      if (!existingAlert) {
+        this.alerts.push(alert);
+      }
+    });
+  }
+
   getAllAlerts(): SafetyAlert[] {
     return this.alerts.filter(alert => !alert.resolved);
   }
@@ -51,7 +84,7 @@ export class SafetyService {
   createAlert(alert: Omit<SafetyAlert, 'id' | 'timestamp'>): SafetyAlert {
     const newAlert: SafetyAlert = {
       ...alert,
-      id: `ALERT-${Date.now()}`,
+      id: `ALERT-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       timestamp: new Date().toISOString()
     };
     
@@ -157,14 +190,31 @@ export class SafetyService {
     return violations;
   }
 
-  runSafetyCheck(): SafetyAlert[] {
-    const allViolations = [
-      ...this.checkWeatherCompliance(),
-      ...this.checkGSRCompliance(),
-      ...this.checkPlatformOccupancy()
-    ];
+  checkSignalCompliance(): SafetyAlert[] {
+    const violations: SafetyAlert[] = [];
+    const trains = trainService.getAllTrains();
 
-    return allViolations;
+    // Check for trains with excessive delays
+    trains.forEach(train => {
+      if (train.delay > 30) {
+        violations.push(this.createAlert({
+          type: 'Signal',
+          severity: 'Medium',
+          title: 'Excessive Delay',
+          description: `Train ${train.number} delayed by ${train.delay} minutes`,
+          affectedTrains: [train.id],
+          affectedStations: [train.currentStation],
+          resolved: false
+        }));
+      }
+    });
+
+    return violations;
+  }
+
+  runSafetyCheck(): SafetyAlert[] {
+    this.runAutomaticSafetyCheck();
+    return this.getAllAlerts();
   }
 }
 

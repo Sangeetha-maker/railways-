@@ -6,6 +6,26 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const type = searchParams.get('type');
     const action = searchParams.get('action');
+    const id = searchParams.get('id');
+
+    if (id) {
+      const recommendations = aiService.getAllRecommendations();
+      const conflicts = aiService.getAllConflicts();
+      
+      const item = recommendations.find(r => r.id === id) || conflicts.find(c => c.id === id);
+      
+      if (item) {
+        return NextResponse.json({
+          success: true,
+          data: item
+        });
+      } else {
+        return NextResponse.json(
+          { success: false, error: 'Item not found' },
+          { status: 404 }
+        );
+      }
+    }
 
     if (action === 'conflicts') {
       const conflictType = searchParams.get('conflictType');
@@ -16,7 +36,8 @@ export async function GET(request: Request) {
       return NextResponse.json({
         success: true,
         data: conflicts,
-        count: conflicts.length
+        count: conflicts.length,
+        timestamp: new Date().toISOString()
       });
     }
 
@@ -25,7 +46,8 @@ export async function GET(request: Request) {
       return NextResponse.json({
         success: true,
         data: recommendations,
-        count: recommendations.length
+        count: recommendations.length,
+        timestamp: new Date().toISOString()
       });
     }
 
@@ -34,7 +56,8 @@ export async function GET(request: Request) {
       return NextResponse.json({
         success: true,
         data: recommendations,
-        count: recommendations.length
+        count: recommendations.length,
+        timestamp: new Date().toISOString()
       });
     }
 
@@ -46,9 +69,11 @@ export async function GET(request: Request) {
     return NextResponse.json({
       success: true,
       data: recommendations,
-      count: recommendations.length
+      count: recommendations.length,
+      timestamp: new Date().toISOString()
     });
   } catch (error) {
+    console.error('Error in AI API:', error);
     return NextResponse.json(
       { success: false, error: 'Failed to fetch AI data' },
       { status: 500 }
@@ -62,10 +87,33 @@ export async function POST(request: Request) {
     const { action, scenario } = body;
 
     if (action === 'what-if-analysis') {
+      if (!scenario || !scenario.trainId) {
+        return NextResponse.json(
+          { success: false, error: 'Scenario with trainId is required' },
+          { status: 400 }
+        );
+      }
+
       const analysis = aiService.runWhatIfAnalysis(scenario);
       return NextResponse.json({
         success: true,
-        data: analysis
+        data: analysis,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    if (action === 'refresh') {
+      // Force refresh of AI analysis
+      const recommendations = aiService.getAllRecommendations();
+      const conflicts = aiService.getAllConflicts();
+      
+      return NextResponse.json({
+        success: true,
+        data: {
+          recommendations,
+          conflicts
+        },
+        timestamp: new Date().toISOString()
       });
     }
 
@@ -74,6 +122,7 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   } catch (error) {
+    console.error('Error in AI POST:', error);
     return NextResponse.json(
       { success: false, error: 'Failed to process AI request' },
       { status: 500 }
