@@ -5,6 +5,7 @@ import { Train, Activity, AlertTriangle, Cloud, Users, Clock, TrendingUp } from 
 
 export default function RailwayDashboard() {
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [mounted, setMounted] = useState(false);
   const [metrics, setMetrics] = useState({
     activeTrains: 24,
     onTimePerformance: 94,
@@ -15,6 +16,7 @@ export default function RailwayDashboard() {
   });
 
   useEffect(() => {
+    setMounted(true);
     const timer = setInterval(() => {
       setCurrentTime(new Date());
     }, 1000);
@@ -83,10 +85,10 @@ export default function RailwayDashboard() {
             </div>
             <div className="text-right">
               <div className="text-white font-mono text-lg">
-                {currentTime.toLocaleTimeString('en-IN', { 
+                {mounted ? currentTime.toLocaleTimeString('en-IN', { 
                   hour12: false,
                   timeZone: 'Asia/Kolkata'
-                })}
+                }) : '--:--:--'}
               </div>
               <div className="text-blue-200 text-sm">IST</div>
             </div>
